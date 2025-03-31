@@ -1,0 +1,52 @@
+import numpy as np
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader
+import torch
+import copy
+from tensorflow.keras.utils import to_categorical
+
+# Define transformations
+transform = transforms.Compose([
+    transforms.ToTensor(),  # Convert to PyTorch tensor
+    transforms.Normalize((0.5,), (0.5,))  # Normalize between -1 and 1
+])
+
+# Load STL-10 dataset
+dataset_train = datasets.STL10(root='./data', split='train', download=True, transform=transform)
+dataset_test = datasets.STL10(root='./data', split='test', download=True, transform=transform)
+
+# Convert PyTorch dataset to NumPy arrays
+def dataset_to_numpy(dataset, num_samples):
+    loader = DataLoader(dataset, batch_size=num_samples, shuffle=False)
+    images, labels = next(iter(loader))
+
+    # PyTorch images are in the format (batch_size, channels, height, width)
+    # We need to reorder them to (batch_size, height, width, channels)
+    images = images.permute(0, 2, 3, 1).numpy()  # Convert from (B, C, H, W) to (B, H, W, C)
+
+    return images, labels.numpy()
+
+# Get NumPy arrays
+x_train_org, y_train_org = dataset_to_numpy(dataset_train, len(dataset_train))
+x_test_org, y_test_org = dataset_to_numpy(dataset_test, len(dataset_test))
+
+# Take a subset for training/testing
+x_train = copy.deepcopy(x_train_org[:5000])  # Ensure we take a subset of 5000 samples
+y_train = copy.deepcopy(y_train_org[:5000])
+
+x_test = copy.deepcopy(x_test_org[:1000])  # Taking 1000 test samples
+y_test = copy.deepcopy(y_test_org[:1000])
+
+# Normalize images to [0, 1] (images are initially in [-1, 1] range after the transform)
+x_train = (x_train.astype('float32') + 1) / 2  # Scale back from [-1, 1] to [0, 1]
+x_test = (x_test.astype('float32') + 1) / 2
+
+# One-hot encode labels
+y_train_1 = to_categorical(y_train, 10)  # STL-10 has 10 classes
+y_test_1 = to_categorical(y_test, 10)
+
+# Print shapes
+print('x_train shape:', x_train.shape)  # Expected shape: (5000, 96, 96, 3)
+print('x_test shape:', x_train.shape)  # Expected shape: (5000, 96, 96, 3)
+print(x_train.shape[0], 'train samples')
+print(x_test.shape[0], 'test samples')
