@@ -1,0 +1,4 @@
+x_train_noisy = copy.deepcopy(x_train)
+x_test_noisy  = copy.deepcopy(x_test)
+x_train_noisy = x_train_noisy + np.random.normal(0,0.15,x_train_noisy.shape)
+x_test_noisy  = x_test_noisy + np.random.normal(0,0.15,x_test_noisy.shape)
