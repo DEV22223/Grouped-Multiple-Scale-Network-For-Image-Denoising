@@ -1,0 +1,85 @@
+import tensorflow as tf
+from tensorflow.keras.layers import Layer, Conv2D, PReLU, Add, Input, Concatenate, BatchNormalization, DepthwiseConv2D, Dropout
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+
+
+# Depthwise Separable Convolution (enhanced)
+class DepthwiseSeparableConv(Layer):
+    def __init__(self, planes, ratio=0.25, dropout_rate=0.1):
+        super(DepthwiseSeparableConv, self).__init__()
+        out_planes = int(planes * ratio)
+
+        self.depthwise_conv = DepthwiseConv2D((3, 3), padding='same', use_bias=False, dilation_rate=2)
+        self.pointwise_conv = Conv2D(planes - out_planes, (1, 1), padding='same', use_bias=False)
+        self.pointwise_conv_out = Conv2D(out_planes, (1, 1), padding='same', use_bias=False)
+        self.dropout = Dropout(dropout_rate)
+
+    def call(self, inputs):
+        depthwise_out = self.depthwise_conv(inputs)
+        pointwise_out = self.pointwise_conv(depthwise_out)
+        pointwise_out2 = self.pointwise_conv_out(depthwise_out)
+        concat_out = Concatenate(axis=-1)([pointwise_out, pointwise_out2])
+        return self.dropout(concat_out)
+
+# Residual Layer (with Dropout and Separable Convs)
+class ResLayer(Layer):
+    def __init__(self, planes, dropout_rate=0.1):
+        super(ResLayer, self).__init__()
+        self.conv1 = DepthwiseSeparableConv(planes, dropout_rate=dropout_rate)
+        self.prelu = PReLU()
+        self.conv2 = DepthwiseSeparableConv(planes, dropout_rate=dropout_rate)
+        self.bn1 = BatchNormalization()
+        self.bn2 = BatchNormalization()
+
+    def call(self, inputs):
+        out = self.conv1(inputs)
+        out = self.bn1(out)
+        out = self.prelu(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        return Add()([out, inputs])
+
+# Residual Group (enhanced with Dropout)
+class ResGroup(Layer):
+    def __init__(self, planes, num_blocks, dropout_rate=0.1):
+        super(ResGroup, self).__init__()
+        self.blocks = [ResLayer(planes, dropout_rate=dropout_rate) for _ in range(num_blocks)]
+        self.fuse = Conv2D(planes, (1, 1), padding='same')
+
+    def call(self, inputs):
+        residual = inputs
+        for block in self.blocks:
+            inputs = block(inputs)
+        out = self.fuse(inputs)
+        return Add()([out, residual])
+
+# Build the optimized GMSNet model
+def build_optimized_gmsnet_model(height, width, num_channels, num_res_blocks):
+    inp = Input(shape=(height, width, 3))
+
+    # Initial Convolution
+    x = Conv2D(num_channels, (3, 3), padding='same')(inp)
+    x = PReLU()(x)
+
+    # Residual Blocks
+    for _ in range(num_res_blocks):
+        x = ResGroup(num_channels, num_blocks=3, dropout_rate=0.2)(x)
+
+    # Final Convolution
+    x = Conv2D(3, (1, 1))(x)
+
+    # Skip connection
+    output = Add()([x, inp])
+
+    model = Model(inputs=inp, outputs=output)
+    return model
+
+# Build the model
+
+model = build_optimized_gmsnet_model(96, 96, 32, 2)  # More channels, fewer groups for quicker training
+# Print model summary
+model.summary()
+
+# Fit with reduced training time per epoch
+
